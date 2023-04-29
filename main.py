@@ -31,8 +31,8 @@ payload_discord = {
 }
 
 
-  ###########################
-	# 	  Payload Discord 	  #
+  	###########################
+	#     Payload Discord 	  #
 	###########################
 
 def send_discord_message(get_is_year):
@@ -43,8 +43,8 @@ def send_discord_message(get_is_year):
     requests.post(wehbhook_url, json=payload_discord)
 
 def get_all_cookies(driver):
-  ###########################
-	# 	Cookie de l'ENT lr	  #
+  	###########################
+	#   Cookie de l'ENT lr	  #
 	###########################
     url_general_id = "https://authentification.univ-lr.fr/cas/login"
     driver.get(url_general_id)
@@ -61,8 +61,8 @@ def get_all_cookies(driver):
     # Soumettre le formulaire de connexion
     password_input.submit()
 
-  ###########################
-	# 	Cookie de notes IUT   #
+  	###########################
+	#   Cookie de notes IUT   #
 	###########################
     url_notes_id = "https://notes.iut-larochelle.fr/"
     driver.get(url_notes_id)
@@ -72,8 +72,8 @@ def get_all_cookies(driver):
         (By.XPATH, '//body[@class="hideAbsences etudiant"]/div[@class="auth" and @style="opacity: 0; pointer-events: none;"]')))
 
 
-  ###########################
-	# 	Récupérer les notes   #
+  	###########################
+	#   Récupérer les notes   #
 	###########################
 def get_ue_averages(driver, url, ue_list):
     driver.get(url)
@@ -95,7 +95,7 @@ ue_list_semestre2 = ["UE 2.1", "UE 2.2", "UE 2.3", "UE 2.4", "UE 2.5", "UE 2.6"]
 ue_list_semestre1 = ["UE 1.1", "UE 1.2", "UE 1.3", "UE 1.4", "UE 1.5", "UE 1.6"]
 
 
-  ###########################
+  	###########################
 	# Check si année validée  #
 	###########################
 old_total = 0
@@ -115,7 +115,7 @@ def check_note():
     if count_below_10 > 2:
         send_discord_message(False)
 
-  ###########################
+  	###########################
 	#    Boucle principale    #
 	###########################
 
