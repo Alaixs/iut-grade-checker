@@ -113,16 +113,15 @@ def check_note():
     for ue_nb in range(0, 6):
         res = float(ue_averages_semestre1[ue_nb]) + float(ue_averages_semestre2[ue_nb])
         res /= 2
-        if res < 8:
-            send_discord_message(False)
-            break
-        else:
-            if ue_nb == 5:
-                send_discord_message(True)
+        print(count_below_10)
         if res < 10:
             count_below_10 += 1
-    if count_below_10 > 2:
-        send_discord_message(False)
+        if res < 8 or count_below_10 > 2:
+            print("UE", ue_nb+1, "average:", res, "pas validé")
+            send_discord_message(False)
+            return
+    send_discord_message(True)
+    print("Semestre 1 et 2 validés")
 
   ###########################
 	#    Boucle principale    #
