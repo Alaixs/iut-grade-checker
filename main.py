@@ -12,8 +12,6 @@ from selenium.webdriver.support import expected_conditions as EC
 # INITIALISATION #
 ##################
 
-driver = webdriver.Chrome()
-
 load_dotenv()
 username_ent = os.getenv('USERNAME_ENT')
 password_ent = os.getenv('PASSWORD_ENT')
@@ -119,13 +117,23 @@ def check_note():
 	###########################
 
 while True:
-    ue_averages_semestre2 = get_ue_averages(driver, url_semestre2, ue_list_semestre2)
-    ue_averages_semestre1 = get_ue_averages(driver, url_semestre1, ue_list_semestre1)
-    pre = WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.TAG_NAME, "pre")))
-    for i in range(0, 6):
-        actual_total = float(ue_averages_semestre2[i]) + float(ue_averages_semestre1[i])
-    if actual_total != old_total:
-        check_note()
-        old_total = actual_total
-    time.sleep(300)
+    try:
+        driver = webdriver.Chrome()
+        ue_averages_semestre2 = get_ue_averages(driver, url_semestre2, ue_list_semestre2)
+        print("124")
+        ue_averages_semestre1 = get_ue_averages(driver, url_semestre1, ue_list_semestre1)
+        print("126")
+        pre = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "pre")))
+        for i in range(0, 6):
+            actual_total = float(ue_averages_semestre2[i]) + float(ue_averages_semestre1[i])
+        if actual_total != old_total:
+            check_note()
+            old_total = actual_total
+        print("refresh")
+        print(old_total, actual_total)
+        time.sleep(300)
+    except Exception as e:
+        print("Exception occurred:", e)
+    finally:
+        driver.quit()
