@@ -18,7 +18,16 @@ from pyvirtualdisplay import Display
 ##################
 
 # Chemin de ChromeDriver
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")
+options.add_argument("disable-infobars"); # disabling infobars
+options.add_argument("--disable-extensions"); # disabling extensions
+options.add_argument("--disable-gpu"); # applicable to windows os only
+options.add_argument("--disable-dev-shm-usage"); # overcome limited resource problems
+options.add_argument("--no-sandbox"); # Bypass OS security model
 chrome_path = "/usr/lib/chromium-browser/chromedriver"
+service = Service(chrome_path)
+driver = webdriver.Chrome(service=service, options=options)
 tz = pytz.timezone('Europe/Paris')
 nb_request = 0
 
@@ -147,10 +156,9 @@ def check_note():
 while True:
     try:
         # Initialisation de Selenium WebDriver headless
-        service = Service(chrome_path)
         display = Display(visible=0, size=(800, 600))
         display.start()
-        driver = webdriver.Chrome(service=service)
+        driver = webdriver.Chrome(service=service, options=options)
         ue_averages_semestre2 = get_ue_averages(
             driver, url_semestre2, ue_list_semestre2
         )
