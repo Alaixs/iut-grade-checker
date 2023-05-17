@@ -45,11 +45,12 @@ payload_discord = {
 
 
 ###########################
-# 	  Payload Discord 	  #
+#         Payload Discord         #
 ###########################
 
 
 def send_discord_message(get_is_year):
+    print("send discord message")
     if get_is_year:
         payload_discord["embeds"][0][
             "description"
@@ -63,7 +64,7 @@ def send_discord_message(get_is_year):
 
 def get_all_cookies(driver):
     ###########################
-    # 	Cookie de l'ENT lr	  #
+    #   Cookie de l'ENT lr        #
     ###########################
     url_general_id = "https://authentification.univ-lr.fr/cas/login"
     driver.get(url_general_id)
@@ -81,7 +82,7 @@ def get_all_cookies(driver):
     password_input.submit()
 
     ###########################
-    # 	Cookie de notes IUT   #
+    #   Cookie de notes IUT   #
     ###########################
     url_notes_id = "https://notes.iut-larochelle.fr/"
     driver.get(url_notes_id)
@@ -97,7 +98,7 @@ def get_all_cookies(driver):
     )
 
 ###########################
-# 	Récupérer les notes   #
+#       Récupérer les notes   #
 ###########################
 def get_ue_averages(driver, url, ue_list):
     driver.get(url)
@@ -172,9 +173,13 @@ while True:
             actual_total = float(ue_averages_semestre2[i]) + float(
                 ue_averages_semestre1[i]
             )
-        if actual_total != old_total:
+        with open('last_note.txt', 'r', encoding='utf-8') as f:
+            last_note = f.read()
+        if actual_total != old_total and last_note != str(actual_total):
             check_note()
             old_total = actual_total
+            with open('last_note.txt', 'w', encoding='utf-8') as f:
+                f.write(str(actual_total))
         print("refresh")
         print(old_total, actual_total)
         time.sleep(300)
