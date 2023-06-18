@@ -1,27 +1,41 @@
 
-# IUT Grade checker
+# IUT Grade Checker
 
-Un simple script en python qui check toute les 5 minutes si il ya une note et si vous avez votre année par webhook discord
+Un simple script python qui vérifie toutes les 5 minutes s'il y a une note et si vous avez votre année en envoyant un webhook discord.
 
 ## Contenu
 
-Il y a qu'une version :
+Il n'y a qu'une seule version :
 ```
-- Global : main.py 
-Prévu pour toute les plateformes
+- main.py
+- .env
+- requirements.txt
+- readme.md
 ```
 
 ## Installation 
 
-Vous avez besoin du fichier python (main.py ou main-rpiOSlite.py au choix)
+Commencez par cloner le repo
 
-Vous devez récupérer le fichier **.env** et **changer les variables avec vos valeurs**.
+```
+git clone https://github.com/Alaixs/iut-grade-checker.git
+cd iut-grade-checker
+```
 
-Executer le script avec 
+Dans le fichier **.env** vous devez **changer les variables avec vos valeurs**.
+
+Installez le fichier requirement.txt afin d'avoir toutes les dépendances.
+```
+pip install -r requirements.txt
+```
+
+## Exécuter le script
+
+Exécuter le script avec 
 ```
 python main.py
 ```
-Ou en background avec 
+Ou en arrière-plan avec 
 
 ```
 nohup python main.py &
