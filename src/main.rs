@@ -45,15 +45,38 @@ async fn get_cookies(client: &Client) -> Result<()> {
         .await?;
     auth.error_for_status_ref().context("Erreur lors de la connexion")?;
 
+
+
     Ok(())
 }
 
 
 
 async fn get_ues(client: &Client) -> Result<()> {
+    // Effectuer une requête GET pour récupérer les données
+    let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
+        .send()
+        .await?;
+    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+
+    let text_response: String = r.text().await?;
+    let json_response: Value = serde_json::from_str(&text_response)?;
+
+
+    getSaes(&json_response);
+
+
     Ok(())
 }
 
+
+fn getSaes(semestre_json: &Value) -> Result<()> {
+
+ //println!("{:?}", semestre_json);
+
+println!("{:?}", semestre_json["relevé"]["saes"]["S2.01"]["evaluations"][0]["note"]);
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,18 +90,10 @@ async fn main() -> Result<()> {
 
     get_cookies(&client).await?;
     // Effectuer une requête GET pour récupérer la page de connexion
-    
 
-    // Effectuer une requête GET pour récupérer les données
-    let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
-        .send()
-        .await?;
-    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+    get_ues(&client).await?;
 
-    let text_response: String = r.text().await?;
-    let json_response: Value = serde_json::from_str(&text_response)?;
 
-    println!("{:?}", json_response);
 
     Ok(())
 }
