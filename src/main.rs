@@ -29,7 +29,6 @@ async fn get_cookies(client: &Client) -> Result<()> {
         .context("Valeur d'exécution introuvable")?;
 
     // Données du formulaire
-
     let form_data: [(&str, &str); 5] = [
         ("username", username.as_str()),
         ("password", password.as_str()),
@@ -45,38 +44,62 @@ async fn get_cookies(client: &Client) -> Result<()> {
         .await?;
     auth.error_for_status_ref().context("Erreur lors de la connexion")?;
 
-
-
     Ok(())
 }
 
 
 
 async fn get_ues(client: &Client) -> Result<()> {
-    // Effectuer une requête GET pour récupérer les données
+
+    let mut semestres_to_fetch: Vec<u64> = vec![];
+    let mut grades: Vec<f32> = vec![];
+
     let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
         .send()
         .await?;
     r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
 
-    let text_response: String = r.text().await?;
-    let json_response: Value = serde_json::from_str(&text_response)?;
+    let json_response: Value = r.json().await?;
 
+    for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
+    {
+        // Si le semestre n'est pas le semestre de dataPremièreConnexion, on l'ajoute à la liste des semestres à récupérer
+        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
+            semestres_to_fetch.push(semestre["formsemestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?);
+        }
+    }
 
-    getSaes(&json_response);
+    for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
+    {
+        // Ces trous de balle ont mis la moyenne en string, donc on récupère le str puis on parse en float
+        grades.push(ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?.parse::<f32>().context("Erreur lors de la récupération des moyennes")?);
+    }
+
+    for id in semestres_to_fetch
+    {
+        let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=relevéEtudiant&semestre=".to_owned()+id.to_string().as_str())
+            .send()
+            .await?;
+        r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+
+        let json_response: Value = r.json().await?;
+       
+        for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
+        {
+            // Ces trous de balle ont mis la moyenne en string, donc on récupère le str puis on parse en float
+            grades.push(ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?.parse::<f32>().context("Erreur lors de la récupération des moyennes")?);
+        }
+    }
+    
+    for grade in grades
+    {
+        println!("{}", grade);
+    }
 
 
     Ok(())
 }
 
-
-fn getSaes(semestre_json: &Value) -> Result<()> {
-
- //println!("{:?}", semestre_json);
-
-println!("{:?}", semestre_json["relevé"]["saes"]["S2.01"]["evaluations"][0]["note"]);
-    Ok(())
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -92,8 +115,6 @@ async fn main() -> Result<()> {
     // Effectuer une requête GET pour récupérer la page de connexion
 
     get_ues(&client).await?;
-
-
 
     Ok(())
 }
