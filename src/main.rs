@@ -64,9 +64,11 @@ async fn get_ues(client: &Client) -> Result<()> {
     for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
     {
         // Si le semestre n'est pas le semestre de dataPremièreConnexion, on l'ajoute à la liste des semestres à récupérer
-        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
+        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] 
+        {
             semestres_to_fetch.push(semestre["formsemestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?);
         }
+        
     }
 
     for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
@@ -77,15 +79,18 @@ async fn get_ues(client: &Client) -> Result<()> {
 
     for id in semestres_to_fetch
     {
+
         let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=relevéEtudiant&semestre=".to_owned()+id.to_string().as_str())
             .send()
             .await?;
         r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
 
+
         let json_response: Value = r.json().await?;
        
         for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
         {
+           print!("{:?}", ue);
             // Ces trous de balle ont mis la moyenne en string, donc on récupère le str puis on parse en float
             grades.push(ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?.parse::<f32>().context("Erreur lors de la récupération des moyennes")?);
         }
@@ -100,6 +105,38 @@ async fn get_ues(client: &Client) -> Result<()> {
     Ok(())
 }
 
+async fn get_saes(client: &Client) -> Result<()>{
+
+    let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
+    .send()
+    .await?;
+r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+
+    let json_response: Value = r.json().await?;
+    let mut semestres_to_fetch: Vec<u64> = vec![];
+    let mut grades: Vec<f32> = vec![];
+
+    for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
+    {
+        // Si le semestre n'est pas le semestre de dataPremièreConnexion, on l'ajoute à la liste des semestres à récupérer
+        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] 
+        {
+            semestres_to_fetch.push(semestre["formsemestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?);
+        }
+    }
+
+    // On recupere chaque note de chaque sae
+     for sae in json_response["relevé"]["saes"].as_object().context("Erreur lors de la récupération des ues")?
+    {
+        for evaluation in sae.1["evaluations"].as_array().context("Erreur lors de la récupération des ues")?
+        {
+            println!("{}", evaluation["note"]["value"].as_str().unwrap());
+        }
+
+}
+
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -115,6 +152,7 @@ async fn main() -> Result<()> {
     // Effectuer une requête GET pour récupérer la page de connexion
 
     get_ues(&client).await?;
+    get_saes(&client).await?;
 
     Ok(())
 }
