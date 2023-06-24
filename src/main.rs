@@ -6,6 +6,8 @@ use dotenv::dotenv;
 use serde_json::Value;
 use anyhow::{Result, Context};
 use std::convert::TryFrom;
+use std::collections::HashMap;
+
 
 const LOGIN_URL: &str = "https://authentification.univ-lr.fr/cas/login?service=https://notes.iut-larochelle.fr/services/doAuth.php?href=https://notes.iut-larochelle.fr/";
 
@@ -109,38 +111,97 @@ async fn get_ues(client: &Client) -> Result<Vec<f32>> {
     
 }
 
-async fn get_saes(client: &Client) -> Result<()>{
-
-    let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
-    .send()
-    .await?;
-r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+async fn get_saes(client: &Client) -> Result<HashMap<String, String>> {
+    let r: Response = client
+        .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
+        .send()
+        .await?;
+    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
 
     let json_response: Value = r.json().await?;
     let mut semestres_to_fetch: Vec<u64> = vec![];
-    let mut grades: Vec<f32> = vec![];
 
-    for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
+    for semestre in json_response["semestres"]
+        .as_array()
+        .context("Erreur lors de la récupération des semestres")?
     {
-        // Si le semestre n'est pas le semestre de dataPremièreConnexion, on l'ajoute à la liste des semestres à récupérer
-        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] 
-        {
-            semestres_to_fetch.push(semestre["formsemestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?);
+        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
+            semestres_to_fetch.push(
+                semestre["formsemestre_id"]
+                    .as_u64()
+                    .context("Erreur lors de la récupération des ids des semestres")?,
+            );
         }
     }
 
-    // On recupere chaque note de chaque sae
-     for sae in json_response["relevé"]["saes"].as_object().context("Erreur lors de la récupération des ues")?
+    let mut saes_dict: HashMap<String, String> = HashMap::new();
+
+    for sae in json_response["relevé"]["saes"]
+        .as_object()
+        .context("Erreur lors de la récupération des ues")?
     {
-        for evaluation in sae.1["evaluations"].as_array().context("Erreur lors de la récupération des ues")?
+        let sae_name = sae.0.to_owned();
+        for evaluation in sae.1["evaluations"]
+            .as_array()
+            .context("Erreur lors de la récupération des ues")?
         {
-            println!("{}", evaluation["note"]["value"].as_str().unwrap());
+            let note_value = evaluation["note"]["value"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            saes_dict.insert(sae_name.clone(), note_value);
         }
+    }
 
+    Ok(saes_dict)
 }
 
-    Ok(())
+
+async fn get_ressources(client: &Client) -> Result<HashMap<String, String>> {
+    let r: Response = client
+        .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
+        .send()
+        .await?;
+    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+
+    let json_response: Value = r.json().await?;
+    let mut semestres_to_fetch: Vec<u64> = vec![];
+
+    for semestre in json_response["semestres"]
+        .as_array()
+        .context("Erreur lors de la récupération des semestres")?
+    {
+        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
+            semestres_to_fetch.push(
+                semestre["formsemestre_id"]
+                    .as_u64()
+                    .context("Erreur lors de la récupération des ids des semestres")?,
+            );
+        }
+    }
+
+    let mut ressources_dict: HashMap<String, String> = HashMap::new();
+
+    for ressource in json_response["relevé"]["ressources"]
+        .as_object()
+        .context("Erreur lors de la récupération des ues")?
+    {
+        let ressource_name = ressource.0.to_owned();
+        for evaluation in ressource.1["evaluations"]
+            .as_array()
+            .context("Erreur lors de la récupération des ues")?
+        {
+            let note_value = evaluation["note"]["value"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            ressources_dict.insert(ressource_name.clone(), note_value);
+        }
+    }
+
+    Ok(ressources_dict)
 }
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -161,6 +222,21 @@ async fn main() -> Result<()> {
     {
         println!("{}", grade);
     }
+
+
+    for saes in get_saes(&client).await?.iter()
+    {
+        println!("{} : {}", saes.0, saes.1);
+    }
+
+    for ressources in get_ressources(&client).await?.iter()
+    {
+        println!("{} : {}", ressources.0, ressources.1);
+    }
+
+
+
+
 
     return Ok(());
 }
