@@ -257,29 +257,25 @@ async fn send_webhook(payload: Vec<String>, year_valid: bool) -> Result<()> {
 
     let payload_str = payload.join("\n"); // Convertir le Vec<String> en une chaîne de caractères
 
-    let mut json_payload = json!({
+    let json_payload = json!({
         "content": null,
         "embeds": [
             {
                 "title": "Changement détecté",
-                "description": format!("Une modification a été détectée sur {}", payload_str),
+                "description": format!("Une modification a été détectée sur **{}**{} ", payload_str, if year_valid { "\n 🟢 Tu **as** ton année" } else { "\n 🔴 Tu **n'as pas** ton année" }),
                 "color": 5814783
             }
         ],
         "attachments": []
     });
 
-    if !year_valid {
-        json_payload["embeds"][0]["description"] = json!("Tu n'as pas ton année");
-    } else {
-        json_payload["embeds"][0]["description"] = json!("Tu as ton année");
-    }
-
     client
         .post(&webhook_url)
         .json(&json_payload)
         .send()
         .await?;
+
+    println!("Webhook envoyé");
 
     Ok(())
 }
@@ -319,6 +315,7 @@ async fn main() -> Result<()> {
     // Effectuer une requête GET pour récupérer la page de connexion
 
 
+
     let mut old_vec_saes: HashMap<String, f32> = get_saes(&client).await?;
     let mut old_vec_ressources: HashMap<String, f32> = get_ressources(&client).await?;
     let mut a_vec: Vec<String>;
@@ -353,7 +350,8 @@ async fn main() -> Result<()> {
             //on change l'ancien dictionnaire par le nouveau
             old_vec_ressources = new_vec_ressources;
         }
-        thread::sleep(Duration::from_secs(300));
+        thread::sleep(Duration::from_secs(15));
     }
+
 
 }
