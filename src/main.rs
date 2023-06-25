@@ -4,9 +4,12 @@ use select::predicate::Name;
 use std::env;
 use dotenv::dotenv;
 use serde_json::Value;
+use serde_json::json;
 use anyhow::{Result, Context};
 use std::convert::TryFrom;
 use std::collections::HashMap;
+use std::thread;
+use std::time::Duration;
 
 
 const LOGIN_URL: &str = "https://authentification.univ-lr.fr/cas/login?service=https://notes.iut-larochelle.fr/services/doAuth.php?href=https://notes.iut-larochelle.fr/";
@@ -111,7 +114,7 @@ async fn get_ues(client: &Client) -> Result<Vec<f32>> {
     
 }
 
-async fn get_saes(client: &Client) -> Result<HashMap<String, String>> {
+async fn get_saes(client: &Client) -> Result<HashMap<String, f32>> {
     let r: Response = client
         .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
         .send()
@@ -134,13 +137,17 @@ async fn get_saes(client: &Client) -> Result<HashMap<String, String>> {
         }
     }
 
-    let mut saes_dict: HashMap<String, String> = HashMap::new();
+    let mut saes_dict: HashMap<String, f32> = HashMap::new();
+    let mut note_final: f32 = 0.0;
 
+    //boucle de récupération des saes
     for sae in json_response["relevé"]["saes"]
         .as_object()
         .context("Erreur lors de la récupération des ues")?
     {
         let sae_name = sae.0.to_owned();
+        
+        //boucle de récupération des évaluations de chaque sae
         for evaluation in sae.1["evaluations"]
             .as_array()
             .context("Erreur lors de la récupération des ues")?
@@ -149,15 +156,24 @@ async fn get_saes(client: &Client) -> Result<HashMap<String, String>> {
                 .as_str()
                 .unwrap()
                 .to_owned();
-            saes_dict.insert(sae_name.clone(), note_value);
+            if note_value == "~"
+            {
+                 note_final += 0.0;
+            } else {
+                note_final += note_value.parse::<f32>().unwrap();
+            }
+            saes_dict.insert(sae_name.clone(), note_final);
+            //on renitialise la note final
+            note_final = 0.0;
         }
     }
+    println!("{:?}", saes_dict);
 
     Ok(saes_dict)
 }
 
 
-async fn get_ressources(client: &Client) -> Result<HashMap<String, String>> {
+async fn get_ressources(client: &Client) -> Result<HashMap<String, f32>> {
     let r: Response = client
         .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
         .send()
@@ -180,7 +196,8 @@ async fn get_ressources(client: &Client) -> Result<HashMap<String, String>> {
         }
     }
 
-    let mut ressources_dict: HashMap<String, String> = HashMap::new();
+    let mut ressources_dict: HashMap<String, f32> = HashMap::new();
+    let mut note_final: f32 = 0.0;
 
     for ressource in json_response["relevé"]["ressources"]
         .as_object()
@@ -195,12 +212,70 @@ async fn get_ressources(client: &Client) -> Result<HashMap<String, String>> {
                 .as_str()
                 .unwrap()
                 .to_owned();
-            ressources_dict.insert(ressource_name.clone(), note_value);
+            
+            if note_value == "~"
+            {
+                 note_final += 0.0;
+            } else {
+                note_final += note_value.parse::<f32>().unwrap();
+            }
         }
+        ressources_dict.insert(ressource_name.clone(), note_final);
+        //on renitialise la note final
+        note_final = 0.0;
     }
+    println!("{:?}", ressources_dict);
 
     Ok(ressources_dict)
 }
+
+fn compare_dictionnaries(dict1: &HashMap<String, f32>, dict2: &HashMap<String, f32>) -> Vec<String>
+{
+    let mut differences: Vec<String> = vec![];
+
+    for (key, value) in dict1
+    {
+        if dict2.contains_key(key)
+        {
+            if dict2[key] != *value
+            {
+                differences.push(key.to_owned());
+            }
+        } else {
+            differences.push(key.to_owned());
+        }
+    }
+
+    return differences;
+}
+
+async fn send_webhook(payload: Vec<String>) -> Result<(), reqwest::Error> {
+    let client = Client::new();
+
+    let webhook_url: String = env::var("WEBHOOK_URL").unwrap();
+
+    let payload_str = payload.join("\n"); // Convertir le Vec<String> en une chaîne de caractères
+
+    let json_payload = json!({
+        "content": null,
+        "embeds": [
+            {
+                "title": "Changement détecté",
+                "description": format!("Une modification a été détectée sur {}", payload_str),
+                "color": 5814783
+            }
+        ],
+        "attachments": []
+    });
+
+        client.post(&webhook_url)
+        .json(&json_payload)
+        .send()
+        .await?;
+
+    Ok(())
+}
+
 
 
 #[tokio::main]
@@ -218,25 +293,41 @@ async fn main() -> Result<()> {
 
     let grades: Vec<f32> = get_ues(&client).await?;
 
-    for grade in &grades
+    println!("{:?}", grades);
+
+
+
+    let mut old_vec_saes: HashMap<String, f32> = get_saes(&client).await?;
+    let mut old_vec_ressources: HashMap<String, f32> = get_ressources(&client).await?;
+    let mut a_vec: Vec<String>;
+    let mut new_vec_ressources: HashMap<String, f32>;
+    let mut new_vec_saes: HashMap<String, f32>;
+
+    loop
     {
-        println!("{}", grade);
+        new_vec_saes= get_saes(&client).await?;
+        new_vec_ressources= get_ressources(&client).await?;
+
+        a_vec = compare_dictionnaries(&old_vec_saes, &new_vec_saes);
+        if !a_vec.is_empty()
+        {
+            //on envoie le webhook
+            send_webhook(a_vec).await?;
+
+            //on change l'ancien dictionnaire par le nouveau
+            old_vec_saes = new_vec_saes;
+
+        }
+        a_vec = compare_dictionnaries(&old_vec_ressources, &new_vec_ressources);
+        if !a_vec.is_empty()
+        {
+            //on envoie le webhook
+            send_webhook(a_vec).await?;
+            
+            //on change l'ancien dictionnaire par le nouveau
+            old_vec_ressources = new_vec_ressources;
+        }
+        thread::sleep(Duration::from_secs(300));
     }
 
-
-    for saes in get_saes(&client).await?.iter()
-    {
-        println!("{} : {}", saes.0, saes.1);
-    }
-
-    for ressources in get_ressources(&client).await?.iter()
-    {
-        println!("{} : {}", ressources.0, ressources.1);
-    }
-
-
-
-
-
-    return Ok(());
 }
