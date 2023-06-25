@@ -1,3 +1,4 @@
+use anyhow::Ok;
 use reqwest::{Response, Client};
 use select::document::Document;
 use select::predicate::Name;
@@ -110,6 +111,8 @@ async fn get_ues(client: &Client) -> Result<Vec<f32>> {
     }
     grades = grades.iter().map(|x| x/f32::from(i16::try_from(semestres_to_fetch.len()+1).unwrap())).collect();
 
+    println!("{:?}", grades);
+
     return Ok(grades);
     
 }
@@ -167,7 +170,6 @@ async fn get_saes(client: &Client) -> Result<HashMap<String, f32>> {
             note_final = 0.0;
         }
     }
-    println!("{:?}", saes_dict);
 
     Ok(saes_dict)
 }
@@ -224,7 +226,6 @@ async fn get_ressources(client: &Client) -> Result<HashMap<String, f32>> {
         //on renitialise la note final
         note_final = 0.0;
     }
-    println!("{:?}", ressources_dict);
 
     Ok(ressources_dict)
 }
@@ -249,14 +250,14 @@ fn compare_dictionnaries(dict1: &HashMap<String, f32>, dict2: &HashMap<String, f
     return differences;
 }
 
-async fn send_webhook(payload: Vec<String>) -> Result<(), reqwest::Error> {
+async fn send_webhook(payload: Vec<String>, year_valid: bool) -> Result<()> {
     let client = Client::new();
 
     let webhook_url: String = env::var("WEBHOOK_URL").unwrap();
 
     let payload_str = payload.join("\n"); // Convertir le Vec<String> en une chaîne de caractères
 
-    let json_payload = json!({
+    let mut json_payload = json!({
         "content": null,
         "embeds": [
             {
@@ -268,13 +269,39 @@ async fn send_webhook(payload: Vec<String>) -> Result<(), reqwest::Error> {
         "attachments": []
     });
 
-        client.post(&webhook_url)
+    if !year_valid {
+        json_payload["embeds"][0]["description"] = json!("Tu n'as pas ton année");
+    } else {
+        json_payload["embeds"][0]["description"] = json!("Tu as ton année");
+    }
+
+    client
+        .post(&webhook_url)
         .json(&json_payload)
         .send()
         .await?;
 
     Ok(())
 }
+
+async fn get_is_year(ues: Vec<f32>) -> Result<bool> {
+    let mut get_is_year : bool = true;
+    let mut count_below_10 = 0;
+
+    for ue_nb in ues {
+        if ue_nb < 8.0 {
+            get_is_year = false;
+        }
+        if ue_nb < 10.0 {
+            count_below_10 += 1;
+        }
+        if count_below_10 >= 2 {
+            get_is_year = false;
+        }
+    }
+    Ok(get_is_year)
+}
+
 
 
 
@@ -291,11 +318,6 @@ async fn main() -> Result<()> {
     get_cookies(&client).await?;
     // Effectuer une requête GET pour récupérer la page de connexion
 
-    let grades: Vec<f32> = get_ues(&client).await?;
-
-    println!("{:?}", grades);
-
-
 
     let mut old_vec_saes: HashMap<String, f32> = get_saes(&client).await?;
     let mut old_vec_ressources: HashMap<String, f32> = get_ressources(&client).await?;
@@ -305,24 +327,28 @@ async fn main() -> Result<()> {
 
     loop
     {
+        println!("refresh...");
         new_vec_saes= get_saes(&client).await?;
         new_vec_ressources= get_ressources(&client).await?;
 
         a_vec = compare_dictionnaries(&old_vec_saes, &new_vec_saes);
         if !a_vec.is_empty()
         {
+            println!("{:?}", a_vec);
+
             //on envoie le webhook
-            send_webhook(a_vec).await?;
+            send_webhook(a_vec, get_is_year(get_ues(&client).await?).await?).await?;
 
             //on change l'ancien dictionnaire par le nouveau
             old_vec_saes = new_vec_saes;
-
         }
         a_vec = compare_dictionnaries(&old_vec_ressources, &new_vec_ressources);
         if !a_vec.is_empty()
         {
+            println!("{:?}", a_vec);
+
             //on envoie le webhook
-            send_webhook(a_vec).await?;
+            send_webhook(a_vec, get_is_year(get_ues(&client).await?).await?).await?;
             
             //on change l'ancien dictionnaire par le nouveau
             old_vec_ressources = new_vec_ressources;
