@@ -350,7 +350,7 @@ async fn main() -> Result<()> {
             //on change l'ancien dictionnaire par le nouveau
             old_vec_ressources = new_vec_ressources;
         }
-        thread::sleep(Duration::from_secs(15));
+        thread::sleep(Duration::from_secs(300));
     }
 
 
