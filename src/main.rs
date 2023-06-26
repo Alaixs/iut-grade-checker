@@ -72,7 +72,7 @@ async fn get_ues_and_data(client: &Client, map_saes: &mut HashMap<String, f32>, 
     if json_response.get("redirect").is_some()
     {
         get_cookies(client).await.context("Erreur lors de la récupération des cookies")?;
-        
+
         let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
             .send()
             .await?;
@@ -287,7 +287,7 @@ async fn main() -> Result<()> {
 
     // Récupérer le nom d'utilisateur et le mot de passe à partir des variables d'environnement
 
-    let client: Client = Client::builder().cookie_store(true).build()?;
+    let client: Client = Client::builder().danger_accept_invalid_certs(true).cookie_store(true).build()?;
 
 
     get_cookies(&client).await?;
