@@ -56,17 +56,30 @@ async fn get_cookies(client: &Client) -> Result<()> {
 
 
 
-async fn get_ues(client: &Client) -> Result<Vec<f32>> {
+async fn get_ues_and_data(client: &Client, map_saes: &mut HashMap<String, f32>, map_ressources: &mut HashMap<String, f32>) -> Result<Vec<f32>> {
 
+// On récupère les données de dataPremièreConnexion et on récupère les ids des semestres restants
     let mut semestres_to_fetch: Vec<u64> = vec![];
-    let mut grades: Vec<f32> = vec![];
+    let mut ues_grades: Vec<f32> = vec![];
 
     let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
         .send()
         .await?;
     r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
 
-    let json_response: Value = r.json().await?;
+    let mut json_response: Value = r.json().await?;
+
+    if json_response.get("redirect").is_some()
+    {
+        get_cookies(client).await.context("Erreur lors de la récupération des cookies")?;
+        
+        let r: Response = client.get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
+            .send()
+            .await?;
+        r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
+
+        json_response = r.json().await?;
+    }
 
     for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
     {
@@ -77,13 +90,58 @@ async fn get_ues(client: &Client) -> Result<Vec<f32>> {
         }
         
     }
+    let releve: &Value = &json_response["relevé"];
 
-    for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
+
+
+
+// On récupère les données du semestre de dataPremièreConnexion
+    for ue in releve["ues"].as_object().context("Erreur lors de la récupération des ues")?
     {
-        // Ces trous de balle ont mis la moyenne en string, donc on récupère le str puis on parse en float
-        grades.push(ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?.parse::<f32>().context("Erreur lors de la récupération des moyennes")?);
+        let grade: &str = ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?;
+        if grade.parse::<f32>().is_ok()
+        {
+            // Ces trous de balle ont mis la moyenne en string, donc on récupère le str puis on parse en float
+            ues_grades.push(grade.parse::<f32>().context("Erreur lors de la récupération des moyennes")?);
+        } else 
+        {
+            ues_grades.push(0.0);
+        }
+        
     }
 
+    for sae in releve["saes"].as_object().context("Erreur lors de la récupération des saes")?
+    {
+        let mut sae_note: f32 = 0.0;
+        for evaluation in sae.1["evaluations"].as_array().context("Erreur lors de la récupération des notes de saes")?
+        {
+            let note: &str = evaluation["note"]["value"].as_str().context("Erreur lors de la récupération de la note de sae")?;
+            if note.parse::<f32>().is_ok()
+            {
+                sae_note += note.parse::<f32>().context("Erreur lors de la récupération de la moyenne de la sae")?;
+            }
+        }
+        map_saes.insert(sae.0.to_string(), sae_note);
+    }
+
+    for ressource in releve["ressources"].as_object().context("Erreur lors de la récupération des ressources")?
+    {
+        let mut ressource_note: f32 = 0.0;
+        for evaluation in ressource.1["evaluations"].as_array().context("Erreur lors de la récupération des notes de ressources")?
+        {
+            let note: &str = evaluation["note"]["value"].as_str().context("Erreur lors de la récupération de la note de ressource")?;
+            if note.parse::<f32>().is_ok()
+            {
+                ressource_note += note.parse::<f32>().context("Erreur lors de la récupération de la moyenne de la ressource")?;
+            }
+        }
+        map_ressources.insert(ressource.0.to_string(), ressource_note);
+    }
+
+
+
+
+// On récupère les données des autres semestres
     for id in &semestres_to_fetch
     {
 
@@ -92,143 +150,64 @@ async fn get_ues(client: &Client) -> Result<Vec<f32>> {
             .await?;
         r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
 
-
         let json_response: Value = r.json().await?;
+        let releve: &Value = &json_response["relevé"];
+
+
+
        
-        for ue in json_response["relevé"]["ues"].as_object().context("Erreur lors de la récupération des ues")?
+        for ue in releve["ues"].as_object().context("Erreur lors de la récupération des ues")?
         {
             let grade_index: usize =  usize::try_from(ue.0.chars().last().context("Erreur lors de la récupération de l'ue")?.to_digit(10).context("Erreur lors de la récupération de l'ue")?).context("Erreur lors de la récupération de l'ue")?;
             let grade: &str = ue.1["moyenne"]["value"].as_str().context("Erreur lors de la récupération des moyennes")?;
             let value_to_add: f32;
             if grade.parse::<f32>().is_ok()
             {
-                value_to_add = grade.parse::<f32>().context("Erreur lors de la récupération des moyennes")?;
+                value_to_add = grade.parse::<f32>().context("Erreur lors de la récupération des moyennes")?.clone();
             } else {
-                value_to_add = grades[grade_index - 1];
+                value_to_add = ues_grades[grade_index - 1];
             }
-            grades[grade_index - 1] += value_to_add;
+            ues_grades[grade_index - 1] += value_to_add;
+        }
+
+        for sae in releve["saes"].as_object().context("Erreur lors de la récupération des saes")?
+        {
+            let mut sae_note: f32 = 0.0;
+            for evaluation in sae.1["evaluations"].as_array().context("Erreur lors de la récupération des notes de saes")?
+            {
+                let note: &str = evaluation["note"]["value"].as_str().context("Erreur lors de la récupération de la note de sae")?;
+                if note.parse::<f32>().is_ok()
+                {
+                    sae_note += note.parse::<f32>().context("Erreur lors de la récupération de la moyenne de la sae")?;
+                }
+            }
+            map_saes.insert(sae.0.to_string(), sae_note);
+        }
+
+        for ressource in releve["ressources"].as_object().context("Erreur lors de la récupération des ressources")?
+        {
+            let mut ressource_note: f32 = 0.0;
+            for evaluation in ressource.1["evaluations"].as_array().context("Erreur lors de la récupération des notes des ressources")?
+            {
+                let note: &str = evaluation["note"]["value"].as_str().context("Erreur lors de la récupération de la note de ressource")?;
+                if note.parse::<f32>().is_ok()
+                {
+                    ressource_note += note.parse::<f32>().context("Erreur lors de la récupération de la moyenne de la ressource")?;
+                }
+            }
+            map_ressources.insert(ressource.0.to_string(), ressource_note);
         }
     }
-    grades = grades.iter().map(|x| x/f32::from(i16::try_from(semestres_to_fetch.len()+1).unwrap())).collect();
 
-    println!("{:?}", grades);
 
-    return Ok(grades);
+    ues_grades = ues_grades.iter().map(|x| x/f32::from(i16::try_from(semestres_to_fetch.len()+1).unwrap())).collect();
+
+    println!("{:?}", ues_grades);
+
+    return Ok(ues_grades);
     
 }
 
-async fn get_saes(client: &Client) -> Result<HashMap<String, f32>> {
-    let r: Response = client
-        .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
-        .send()
-        .await?;
-    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
-
-    let json_response: Value = r.json().await?;
-    let mut semestres_to_fetch: Vec<u64> = vec![];
-
-    for semestre in json_response["semestres"]
-        .as_array()
-        .context("Erreur lors de la récupération des semestres")?
-    {
-        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
-            semestres_to_fetch.push(
-                semestre["formsemestre_id"]
-                    .as_u64()
-                    .context("Erreur lors de la récupération des ids des semestres")?,
-            );
-        }
-    }
-
-    let mut saes_dict: HashMap<String, f32> = HashMap::new();
-    let mut note_final: f32 = 0.0;
-
-    //boucle de récupération des saes
-    for sae in json_response["relevé"]["saes"]
-        .as_object()
-        .context("Erreur lors de la récupération des ues")?
-    {
-        let sae_name = sae.0.to_owned();
-        
-        //boucle de récupération des évaluations de chaque sae
-        for evaluation in sae.1["evaluations"]
-            .as_array()
-            .context("Erreur lors de la récupération des ues")?
-        {
-            let note_value = evaluation["note"]["value"]
-                .as_str()
-                .unwrap()
-                .to_owned();
-            if note_value == "~"
-            {
-                 note_final += 0.0;
-            } else {
-                note_final += note_value.parse::<f32>().unwrap();
-            }
-            saes_dict.insert(sae_name.clone(), note_final);
-            //on renitialise la note final
-            note_final = 0.0;
-        }
-    }
-
-    Ok(saes_dict)
-}
-
-
-async fn get_ressources(client: &Client) -> Result<HashMap<String, f32>> {
-    let r: Response = client
-        .get("https://notes.iut-larochelle.fr/services/data.php?q=dataPremièreConnexion")
-        .send()
-        .await?;
-    r.error_for_status_ref().context("Erreur lors de la récupération des données")?;
-
-    let json_response: Value = r.json().await?;
-    let mut semestres_to_fetch: Vec<u64> = vec![];
-
-    for semestre in json_response["semestres"]
-        .as_array()
-        .context("Erreur lors de la récupération des semestres")?
-    {
-        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"] {
-            semestres_to_fetch.push(
-                semestre["formsemestre_id"]
-                    .as_u64()
-                    .context("Erreur lors de la récupération des ids des semestres")?,
-            );
-        }
-    }
-
-    let mut ressources_dict: HashMap<String, f32> = HashMap::new();
-    let mut note_final: f32 = 0.0;
-
-    for ressource in json_response["relevé"]["ressources"]
-        .as_object()
-        .context("Erreur lors de la récupération des ues")?
-    {
-        let ressource_name = ressource.0.to_owned();
-        for evaluation in ressource.1["evaluations"]
-            .as_array()
-            .context("Erreur lors de la récupération des ues")?
-        {
-            let note_value = evaluation["note"]["value"]
-                .as_str()
-                .unwrap()
-                .to_owned();
-            
-            if note_value == "~"
-            {
-                 note_final += 0.0;
-            } else {
-                note_final += note_value.parse::<f32>().unwrap();
-            }
-        }
-        ressources_dict.insert(ressource_name.clone(), note_final);
-        //on renitialise la note final
-        note_final = 0.0;
-    }
-
-    Ok(ressources_dict)
-}
 
 fn compare_dictionnaries(dict1: &HashMap<String, f32>, dict2: &HashMap<String, f32>) -> Vec<String>
 {
@@ -280,15 +259,15 @@ async fn send_webhook(payload: Vec<String>, year_valid: bool) -> Result<()> {
     Ok(())
 }
 
-async fn get_is_year(ues: Vec<f32>) -> Result<bool> {
+async fn get_is_year(ues: &Vec<f32>) -> Result<bool> {
     let mut get_is_year : bool = true;
-    let mut count_below_10 = 0;
+    let mut count_below_10: i8 = 0;
 
     for ue_nb in ues {
-        if ue_nb < 8.0 {
+        if *ue_nb < 8.0 {
             get_is_year = false;
         }
-        if ue_nb < 10.0 {
+        if *ue_nb < 10.0 {
             count_below_10 += 1;
         }
         if count_below_10 >= 2 {
@@ -316,17 +295,18 @@ async fn main() -> Result<()> {
 
 
 
-    let mut old_vec_saes: HashMap<String, f32> = get_saes(&client).await?;
-    let mut old_vec_ressources: HashMap<String, f32> = get_ressources(&client).await?;
+    let mut old_vec_saes: HashMap<String, f32> = HashMap::new();
+    let mut old_vec_ressources: HashMap<String, f32> = HashMap::new();
     let mut a_vec: Vec<String>;
-    let mut new_vec_ressources: HashMap<String, f32>;
-    let mut new_vec_saes: HashMap<String, f32>;
+    let mut new_vec_ressources: HashMap<String, f32> = HashMap::new();
+    let mut new_vec_saes: HashMap<String, f32> = HashMap::new();
+
+    get_ues_and_data(&client, &mut old_vec_saes, &mut old_vec_ressources).await?;
 
     loop
     {
         println!("refresh...");
-        new_vec_saes= get_saes(&client).await?;
-        new_vec_ressources= get_ressources(&client).await?;
+        let ues_grades: &Vec<f32> = &get_ues_and_data(&client, &mut new_vec_saes, &mut new_vec_ressources).await?;
 
         a_vec = compare_dictionnaries(&old_vec_saes, &new_vec_saes);
         if !a_vec.is_empty()
@@ -334,21 +314,21 @@ async fn main() -> Result<()> {
             println!("{:?}", a_vec);
 
             //on envoie le webhook
-            send_webhook(a_vec, get_is_year(get_ues(&client).await?).await?).await?;
+            send_webhook(a_vec, get_is_year(ues_grades).await?).await?;
 
             //on change l'ancien dictionnaire par le nouveau
-            old_vec_saes = new_vec_saes;
+            old_vec_saes = new_vec_saes.clone();
         }
-        a_vec = compare_dictionnaries(&old_vec_ressources, &new_vec_ressources);
+        a_vec = compare_dictionnaries(&mut old_vec_ressources, &mut new_vec_ressources);
         if !a_vec.is_empty()
         {
             println!("{:?}", a_vec);
 
             //on envoie le webhook
-            send_webhook(a_vec, get_is_year(get_ues(&client).await?).await?).await?;
+            send_webhook(a_vec, get_is_year(ues_grades).await?).await?;
             
             //on change l'ancien dictionnaire par le nouveau
-            old_vec_ressources = new_vec_ressources;
+            old_vec_ressources = new_vec_ressources.clone();
         }
         thread::sleep(Duration::from_secs(300));
     }
