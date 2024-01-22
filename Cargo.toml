@@ -1,0 +1,14 @@
+[package]
+name = "my-project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.11.16", features = ["cookies", "json"] }
+select = "0.6"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1.0"
+dotenv = "0.15"
+anyhow = "1.0"
+chrono = "0.4.31"
+

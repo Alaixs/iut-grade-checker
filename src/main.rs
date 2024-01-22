@@ -11,6 +11,7 @@ use std::convert::TryFrom;
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
+use chrono;
 
 
 const LOGIN_URL: &str = "https://authentification.univ-lr.fr/cas/login?service=https://notes.iut-larochelle.fr/services/doAuth.php?href=https://notes.iut-larochelle.fr/";
@@ -84,7 +85,8 @@ async fn get_ues_and_data(client: &Client, map_saes: &mut HashMap<String, f32>, 
     for semestre in json_response["semestres"].as_array().context("Erreur lors de la récupération des semestres")?
     {
         // Si le semestre n'est pas le semestre de dataPremièreConnexion, on l'ajoute à la liste des semestres à récupérer
-        if semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"]
+        if (semestre["semestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?) > 2 && 
+		semestre["formsemestre_id"] != json_response["relevé"]["formsemestre_id"]
         {
             semestres_to_fetch.push(semestre["formsemestre_id"].as_u64().context("Erreur lors de la récupération des ids des semestres")?);
         }
@@ -305,6 +307,7 @@ async fn main() -> Result<()> {
 
     loop
     {
+        println!("{:?}", chrono::offset::Local::now());
         println!("refresh...");
         let ues_grades: &Vec<f32> = &get_ues_and_data(&client, &mut new_vec_saes, &mut new_vec_ressources).await?;
 
