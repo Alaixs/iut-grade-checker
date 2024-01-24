@@ -96,7 +96,6 @@ async fn get_ues_and_data(client: &Client, map_saes: &mut HashMap<String, f32>, 
 
 
 
-
 // On récupère les données du semestre de dataPremièreConnexion
     for ue in releve["ues"].as_object().context("Erreur lors de la récupération des ues")?
     {
@@ -154,8 +153,6 @@ async fn get_ues_and_data(client: &Client, map_saes: &mut HashMap<String, f32>, 
 
         let json_response: Value = r.json().await?;
         let releve: &Value = &json_response["relevé"];
-
-
 
 
         for ue in releve["ues"].as_object().context("Erreur lors de la récupération des ues")?
@@ -236,6 +233,8 @@ async fn send_webhook(payload: Vec<String>, year_valid: bool) -> Result<()> {
 
     let webhook_url: String = env::var("WEBHOOK_URL").unwrap();
 
+    let webhook_url2: String = env::var("WEBHOOK_URL2").unwrap();
+
     let payload_str = payload.join("\n"); // Convertir le Vec<String> en une chaîne de caractères
 
     let json_payload = json!({
@@ -252,6 +251,12 @@ async fn send_webhook(payload: Vec<String>, year_valid: bool) -> Result<()> {
 
     client
         .post(&webhook_url)
+        .json(&json_payload)
+        .send()
+        .await?;
+
+    client
+        .post(&webhook_url2)
         .json(&json_payload)
         .send()
         .await?;
